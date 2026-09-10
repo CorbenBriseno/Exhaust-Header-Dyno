@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universal Engine Dyno & Header Simulator</title>
+    <!-- Include Chart.js for the dyno graph -->
+    <script src="https://jsdelivr.net"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --hp-color: #ef4444;
+            --tq-color: #3b82f6;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1000px;
+            background: var(--card-bg);
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 1.8rem;
+            color: var(--accent);
+            text-align: center;
+            border-bottom: 2px solid #334155;
+            padding-bottom: 12px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 24px;
+            margin-top: 20px;
+        }
+
+        @media (min-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr 2fr;
+            }
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            background: #111827;
+            padding: 16px;
+            border-radius: 8px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        input[type="number"], input[type="range"] {
+            width: 100%;
+            box-sizing: border-box;
+            background: #1f2937;
+            border: 1px solid #4b5563;
+            color: #fff;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        input[type="range"] {
+            padding: 0;
+            cursor: pointer;
+        }
+
+        .slider-val {
+            text-align: center;
+            font-size: 1.25rem;
+            font-weight: bold;
+            color: var(--accent);
+            margin-top: 4px;
+        }
+
+        .output-box {
+            background: #1e293b;
+            border-left: 4px solid var(--accent);
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            margin-top: 10px;
+        }
+
+        .chart-container {
+            position: relative;
+            background: #111827;
+            padding: 16px;
+            border-radius: 8px;
+            min-height: 400px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Universal Engine Dyno & Header Simulator</h1>
+    
+    <div class="grid">
+        <!-- Sidebar Controls -->
+        <div class="controls">
+            <h3>Engine Configuration</h3>
+            
+            <div class="input-group">
+                <label for="cid">Total Displacement (CID)</label>
+                <input type="number" id="cid" value="307" min="10" max="1000">
+            </div>
+
+            <div class="input-group">
+                <label for="cylinders">Cylinders</label>
+                <input type="number" id="cylinders" value="8" min="1" max="16">
+            </div>
+
+            <div class="input-group">
+                <label for="targetRpm">Target Peak Torque RPM</label>
+                <input type="number" id="targetRpm" value="4800" min="1000" max="15000" step="100">
+            </div>
+
+            <div class="input-group">
+                <label for="redline">Engine Redline (RPM)</label>
+                <input type="number" id="redline" value="7500" min="2000" max="18000" step="100">
+            </div>
+
+            <hr style="border-color: #334155; width: 100%;">
+
+            <h3>Exhaust Header Tube</h3>
+            <div class="input-group">
+                <label for="pipeSize">Primary Pipe Outside Diameter (OD in inches)</label>
+                <input type="range" id="pipeSize" min="1.0" max="2.5" step="0.01" value="1.75">
+                <div class="slider-val" id="pipeSizeVal">1.75"</div>
+            </div>
+
+            <div class="output-box" id="mathOutput">
+                Calculating optimum area...
+            </div>
+        </div>
+
+        <!-- Dyno Graph Area -->
+        <div class="chart-container">
+            <canvas id="dynoChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Get UI elements
+    const cidInput = document.getElementById('cid');
+    const cylInput = document.getElementById('cylinders');
+    const targetRpmInput = document.getElementById('targetRpm');
+    const redlineInput = document.getElementById('redline');
+    const pipeSizeInput = document.getElementById('pipeSize');
+    const pipeSizeVal = document.getElementById('pipeSizeVal');
+    const mathOutput = document.getElementById('mathOutput');
+    const ctx = document.getElementById('dynoChart').getContext('2d');
+
+    let dynoChart;
+
+    // Initialize Chart
+    function initChart() {
+        dynoChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Horsepower (HP)',
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        data: [],
+                        yAxisID: 'y',
+                        tension: 0.3,
+                        pointRadius: 0
+                    },
+                    {
+                        label: 'Torque (LB-FT)',
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        data: [],
+                        yAxisID: 'y1',
+                        tension: 0.3,
+                        pointRadius: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        title: { display: true, text: 'RPM', color: '#94a3b8' },
+                        grid: { color: '#334155' },
+                        ticks: { color: '#94a3b8' }
+                    },
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        title: { display: true, text: 'Horsepower', color: '#ef4444' },
+                        grid: { color: '#334155' },
+                        ticks: { color: '#94a3b8' }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        title: { display: true, text: 'Torque (lb-ft)', color: '#3b82f6' },
+                        grid: { drawOnChartArea: false },
+                        ticks: { color: '#94a3b8' }
+                    }
+                },
+                plugins: {
+                    legend: { labels: { color: '#f8fafc' } }
+                }
+            }
+        });
+    }
+
+    // Mathematical Engine Simulation Engine Logic
+    function updateSimulation() {
+        const cid = parseFloat(cidInput.value) || 300;
+        const cylinders = parseInt(cylInput.value) || 8;
+        const targetRpm = parseFloat(targetRpmInput.value) || 4500;
+        const redline = parseFloat(redlineInput.value) || 7000;
+        const chosenOD = parseFloat(pipeSizeInput.value);
+
+        pipeSizeVal.innerText = chosenOD.toFixed(2) + '"';
+
+        // 1. Math formulas for targets
+        const ccPerCyl = cid / cylinders;
+        const idealPPA = (targetRpm / 88200) * ccPerCyl;
+        const idealID = Math.sqrt(idealPPA * 1.273);
+        const idealOD = idealID + 0.13; // assuming standard 16-gauge walls
+
+        // Display math insights
+        mathOutput.innerHTML = `
+            <strong>Math Calculations:</strong><br>
+            • Ideal Primary Area: <strong>${idealPPA.toFixed(2)} in²</strong><br>
+            • Ideal Tube OD for target: <strong>${idealOD.toFixed(2)}"</strong><br>
+            • Current Tube OD setup: <strong>${chosenOD.toFixed(2)}"</strong>
+        `;
+
+        // 2. Build the dyno curves based on tube sizing vs ideal velocity
+        const rpms = [];
+        const hpData = [];
+        const tqData = [];
+
+        // Estimate maximum potential baseline torque based on displacement (roughly 1.15 lb-ft per CID for an optimized baseline)
+        const basePeakTorque = cid * 1.15; 
+        
+        // Calculate pipe size factor (how far away from ideal diameter we are)
+        // Deviating shifts the torque peak up or down the RPM band
+        const sizeDelta = chosenOD - idealOD;
+        const rpmShift = sizeDelta * 1800; // 1-inch variance shifts tuning curve drastically
+        const actualTorquePeakRpm = targetRpm + rpmShift;
+
+        for (let rpm = 1000; rpm <= redline; rpm += 250) {
+            rpms.push(rpm);
+
+            // Create a realistic parabolic torque curve shape peaking at actualTorquePeakRpm
+            const spread = 3500; // width of usable powerband
+            let tqEfficiency = 1 - Math.pow((rpm - actualTorquePeakRpm) / spread, 2);
+            if (tqEfficiency < 0.2) tqEfficiency = 0.2; // Floor limits dropping to zero
+
+            let chokeFactor = 1.0;
+            if (chosenOD < idealOD - 0.2) {
+            const highRpmPenalty = Math.max(0, rpm - 4000);
+            chokeFactor -= (highRpmPenalty / 10000) * ( (idealOD - chosenOD) * 2 );
+            } 
+            // Restrict bottom-end scavenging if pipe is way too big (loss of velocity) 
+            if (chosenOD > idealOD + 0.2 && rpm < targetRpm) { 
+            const lowRpmPenalty = Math.max(0, targetRpm - rpm);
+            chokeFactor -= (lowRpmPenalty / targetRpm) * ( (chosenOD - idealOD) * 0.5 );
+            }
+            let calculatedTorque = basePeakTorque * tqEfficiency * Math.max(0.4,
+            chokeFactor); 
+            let calculatedHP = (calculatedTorque * rpm) / 5252;
+            tqData.push(Math.round(calculatedTorque));
+            hpData.push(Math.round(calculatedHP));
+            }
+            // Push data to Chart.js interface
+            dynoChart.data.labels = rpms;
+            dynoChart.data.datasets[0].data = hpData;
+            dynoChart.data.datasets[1].data = tqData;
+            dynoChart.update();
+            }
+            // Attach real-time event listeners to recalculate instantly on input changes
+            [cidInput, cylInput, targetRpmInput, redlineInput, pipeSizeInput].forEach(element
+            => {
+            element.addEventListener('input', updateSimulation);
+            });
+            // Run setup on load
+            initChart()
+            ;updateSimulation();
+
+             
