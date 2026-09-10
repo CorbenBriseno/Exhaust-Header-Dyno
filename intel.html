@@ -1,11 +1,12 @@
 <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Universal Engine Dyno & Header Simulator</title>
     <!-- Include Chart.js for the dyno graph -->
-    <script src="https://jsdelivr.net"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -293,33 +294,37 @@
 
             let chokeFactor = 1.0;
             if (chosenOD < idealOD - 0.2) {
-            const highRpmPenalty = Math.max(0, rpm - 4000);
-            chokeFactor -= (highRpmPenalty / 10000) * ( (idealOD - chosenOD) * 2 );
+                const highRpmPenalty = Math.max(0, rpm - 4000);
+                chokeFactor -= (highRpmPenalty / 10000) * ((idealOD - chosenOD) * 2);
             } 
             // Restrict bottom-end scavenging if pipe is way too big (loss of velocity) 
             if (chosenOD > idealOD + 0.2 && rpm < targetRpm) { 
-            const lowRpmPenalty = Math.max(0, targetRpm - rpm);
-            chokeFactor -= (lowRpmPenalty / targetRpm) * ( (chosenOD - idealOD) * 0.5 );
+                const lowRpmPenalty = Math.max(0, targetRpm - rpm);
+                chokeFactor -= (lowRpmPenalty / targetRpm) * ((chosenOD - idealOD) * 0.5);
             }
-            let calculatedTorque = basePeakTorque * tqEfficiency * Math.max(0.4,
-            chokeFactor); 
+            
+            let calculatedTorque = basePeakTorque * tqEfficiency * Math.max(0.4, chokeFactor); 
             let calculatedHP = (calculatedTorque * rpm) / 5252;
             tqData.push(Math.round(calculatedTorque));
             hpData.push(Math.round(calculatedHP));
-            }
-            // Push data to Chart.js interface
-            dynoChart.data.labels = rpms;
-            dynoChart.data.datasets[0].data = hpData;
-            dynoChart.data.datasets[1].data = tqData;
-            dynoChart.update();
-            }
-            // Attach real-time event listeners to recalculate instantly on input changes
-            [cidInput, cylInput, targetRpmInput, redlineInput, pipeSizeInput].forEach(element
-            => {
-            element.addEventListener('input', updateSimulation);
-            });
-            // Run setup on load
-            initChart()
-            ;updateSimulation();
+        }
+        
+        // Push data to Chart.js interface
+        dynoChart.data.labels = rpms;
+        dynoChart.data.datasets[0].data = hpData;
+        dynoChart.data.datasets[1].data = tqData;
+        dynoChart.update();
+    }
+    
+    // Attach real-time event listeners to recalculate instantly on input changes
+    [cidInput, cylInput, targetRpmInput, redlineInput, pipeSizeInput].forEach(element => {
+        element.addEventListener('input', updateSimulation);
+    });
+    
+    // Run setup on load
+    initChart();
+    updateSimulation();
+</script>
 
-             
+</body>
+</html>
